@@ -31,10 +31,8 @@ services:
     env_file:
       - .env
     environment:
-      # Переопределяем хосты для Docker сети
       DB_HOST: postgres
       REDIS_HOST: redis
-      # Добавляем флаг что мы в Docker
       IN_DOCKER: "true"
     ports:
       - "${HTTP_PORT}:${HTTP_PORT}"

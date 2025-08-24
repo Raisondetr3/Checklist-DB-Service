@@ -21,12 +21,6 @@ import (
 )
 
 func main() {
-	// if err := godotenv.Load(); err != nil {
-	// 	slog.Info("No .env file found")
-	// } else {
-	// 	slog.Info("Loaded configuration from .env file")
-	// }
-
 	cfg, err := config.Load()
 	if err != nil {
 		panic("Failed to load config: " + err.Error())

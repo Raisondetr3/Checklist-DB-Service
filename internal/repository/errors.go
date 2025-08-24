@@ -3,18 +3,23 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var (
-	ErrTaskNotFound      = errors.New("task not found")
-	ErrTaskAlreadyExists = errors.New("task already exists")
-	ErrDatabaseConnection = errors.New("database connection error")
-	ErrInvalidData       = errors.New("invalid data provided")
+	ErrTaskNotFound        = errors.New("task not found")
+	ErrTaskAlreadyExists   = errors.New("task already exists")
+	ErrDatabaseConnection  = errors.New("database connection error")
+	ErrInvalidData         = errors.New("invalid data provided")
 	ErrConstraintViolation = errors.New("database constraint violation")
-	ErrTransactionFailed = errors.New("transaction failed")
+	ErrTransactionFailed   = errors.New("transaction failed")
+
+	ErrHealthCheckFailed   = errors.New("health check failed")
+	ErrDatabaseUnreachable = errors.New("database unreachable")
+	ErrSlowResponse        = errors.New("slow database response")
 )
 
 type RepositoryError struct {
@@ -32,7 +37,7 @@ func (e *RepositoryError) Error() string {
 func (e *RepositoryError) Unwrap() error {
 	return e.Err
 }
- 
+
 func WrapError(op string, err error) error {
 	if err == nil {
 		return nil
@@ -45,8 +50,14 @@ func HandlePgxError(op string, err error) error {
 		return nil
 	}
 
-	if errors.Is(err, pgx.ErrNoRows) {
-		return WrapError(op, ErrTaskNotFound)
+	if strings.Contains(op, "health") {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return WrapError(op, ErrHealthCheckFailed)
+		}
+	} else {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return WrapError(op, ErrTaskNotFound)
+		}
 	}
 
 	var pgErr *pgconn.PgError
@@ -81,11 +92,11 @@ func IsNotFoundError(err error) bool {
 func IsConstraintError(err error) bool {
 	var repoErr *RepositoryError
 	if errors.As(err, &repoErr) {
-		return errors.Is(repoErr.Err, ErrConstraintViolation) || 
-			   errors.Is(repoErr.Err, ErrTaskAlreadyExists)
+		return errors.Is(repoErr.Err, ErrConstraintViolation) ||
+			errors.Is(repoErr.Err, ErrTaskAlreadyExists)
 	}
-	return errors.Is(err, ErrConstraintViolation) || 
-		   errors.Is(err, ErrTaskAlreadyExists)
+	return errors.Is(err, ErrConstraintViolation) ||
+		errors.Is(err, ErrTaskAlreadyExists)
 }
 
 func IsConnectionError(err error) bool {
@@ -94,4 +105,16 @@ func IsConnectionError(err error) bool {
 		return errors.Is(repoErr.Err, ErrDatabaseConnection)
 	}
 	return errors.Is(err, ErrDatabaseConnection)
+}
+
+func IsHealthCheckError(err error) bool {
+	var repoErr *RepositoryError
+	if errors.As(err, &repoErr) {
+		return errors.Is(repoErr.Err, ErrHealthCheckFailed) ||
+			errors.Is(repoErr.Err, ErrDatabaseUnreachable) ||
+			errors.Is(repoErr.Err, ErrSlowResponse)
+	}
+	return errors.Is(err, ErrHealthCheckFailed) ||
+		errors.Is(err, ErrDatabaseUnreachable) ||
+		errors.Is(err, ErrSlowResponse)
 }

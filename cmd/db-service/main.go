@@ -17,15 +17,15 @@ import (
 	"github.com/Raisondetr3/checklist-db-service/pkg/logger"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/joho/godotenv"
+	_ "github.com/joho/godotenv"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		slog.Info("No .env file found")
-	} else {
-		slog.Info("Loaded configuration from .env file")
-	}
+	// if err := godotenv.Load(); err != nil {
+	// 	slog.Info("No .env file found")
+	// } else {
+	// 	slog.Info("Loaded configuration from .env file")
+	// }
 
 	cfg, err := config.Load()
 	if err != nil {

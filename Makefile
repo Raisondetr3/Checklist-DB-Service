@@ -17,9 +17,10 @@ deps:
 	go mod tidy
 
 proto-gen:
-	protoc --go_out=. --go_opt=paths=source_relative \
-	       --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-	       internal/proto/task.proto
+	mkdir -p pb
+	protoc --go_out=pb --go_opt=paths=source_relative \
+	       --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
+	       pkg/proto/task.proto
 
 proto-clean:
-	rm -f pb/*.pb.go
+	rm -f pkg/pb/*.pb.go

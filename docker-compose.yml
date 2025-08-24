@@ -1,0 +1,78 @@
+# docker-compose.yml - используем env_file
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: checklist-postgres
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - checklist-network
+    restart: unless-stopped
+
+  checklist-db-service:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: checklist-db-service
+    env_file:
+      - .env
+    environment:
+      # Переопределяем только то, что нужно для Docker
+      DB_HOST: postgres  # В контейнере хост = имя сервиса
+      REDIS_HOST: redis
+    ports:
+      - "${HTTP_PORT:-8081}:${HTTP_PORT:-8081}"
+      - "${GRPC_PORT:-9090}:${GRPC_PORT:-9090}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - checklist-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: checklist-redis
+    env_file:
+      - .env
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - checklist-network
+    restart: unless-stopped
+    profiles:
+      - redis
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  checklist-network:
+    driver: bridge

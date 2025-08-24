@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package task;
 
+option go_package = "github.com/Raisondetr3/checklist-db-service/pb";
+
 import "google/protobuf/timestamp.proto";
 
 service TaskService {

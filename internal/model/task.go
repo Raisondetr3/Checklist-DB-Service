@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Task доменная модель (НЕ protobuf!)
 type Task struct {
 	ID          uuid.UUID
 	Title       string
@@ -16,16 +15,14 @@ type Task struct {
 	UpdatedAt   time.Time
 }
 
-// Бизнес-методы
 func NewTask(title, description string) *Task {
-	now := time.Now()
 	return &Task{
 		ID:          uuid.New(),
 		Title:       title,
 		Description: description,
 		Completed:   false,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 }
 

@@ -5,148 +5,107 @@ import (
 	"os"
 	"strconv"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Logging  LoggingConfig  `yaml:"logging"`
-	Database DatabaseConfig `yaml:"database"`
-	Redis    RedisConfig    `yaml:"redis"`
+	Server   ServerConfig
+	Logging  LoggingConfig
+	Database DatabaseConfig
+	Redis    RedisConfig
 }
 
 type ServerConfig struct {
-	GRPCPort     string        `yaml:"grpc_port"`
-	ReadTimeout  time.Duration `yaml:"read_timeout"`
-	WriteTimeout time.Duration `yaml:"write_timeout"`
-	IdleTimeout  time.Duration `yaml:"idle_timeout"`
+	HTTPPort     string
+	GRPCPort     string
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+	IdleTimeout  time.Duration
 }
 
 type LoggingConfig struct {
-	Level    string `yaml:"level"`
-	FilePath string `yaml:"file_path"`
-	FileName string `yaml:"file_name"`
+	Level    string
+	FilePath string
+	FileName string
 }
 
 type DatabaseConfig struct {
-	Host         string        `yaml:"host"`
-	Port         int           `yaml:"port"`
-	Name         string        `yaml:"name"`
-	User         string        `yaml:"user"`
-	Password     string        `yaml:"password"`
-	QueryTimeout time.Duration `yaml:"query_timeout"`
+	Host     string
+	Port     int
+	Name     string
+	User     string
+	Password string
 }
 
 type RedisConfig struct {
-	Enabled      bool          `yaml:"enabled"`
-	Host         string        `yaml:"host"`
-	Port         int           `yaml:"port"`
-	Password     string        `yaml:"password"`
-	DB           int           `yaml:"db"`
-	PoolSize     int           `yaml:"pool_size"`
-	DialTimeout  time.Duration `yaml:"dial_timeout"`
-	ReadTimeout  time.Duration `yaml:"read_timeout"`
-	WriteTimeout time.Duration `yaml:"write_timeout"`
-	TTL          time.Duration `yaml:"ttl"`
+	Enabled  bool
+	Host     string
+	Port     int
+	Password string
+	DB       int
 }
 
 func Load() (*Config, error) {
-	cfg, err := loadConfigFile("configs/config.yml")
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
+	cfg := &Config{
+		// Дефолтные значения
+		Server: ServerConfig{
+			HTTPPort:     getEnv("HTTP_PORT", "8081"),
+			GRPCPort:     getEnv("GRPC_PORT", "9090"),
+			ReadTimeout:  30 * time.Second,
+			WriteTimeout: 30 * time.Second,
+			IdleTimeout:  120 * time.Second,
+		},
+		Logging: LoggingConfig{
+			Level:    getEnv("LOG_LEVEL", "info"),
+			FilePath: getEnv("LOG_FILE_PATH", "logs"),
+			FileName: getEnv("LOG_FILE_NAME", "db-service.log"),
+		},
+		Database: DatabaseConfig{
+			Host:     getEnv("DB_HOST", "localhost"),
+			Port:     getEnvInt("DB_PORT", 5432),
+			Name:     getEnv("DB_NAME", "checklist_db"),
+			User:     getEnv("DB_USER", "checklist_user"),
+			Password: getEnv("DB_PASSWORD", ""),
+		},
+		Redis: RedisConfig{
+			Enabled:  getEnvBool("REDIS_ENABLED", false),
+			Host:     getEnv("REDIS_HOST", "localhost"),
+			Port:     getEnvInt("REDIS_PORT", 6379),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       getEnvInt("REDIS_DB", 0),
+		},
 	}
-
-	overrideFromEnv(cfg)
 
 	return cfg, nil
 }
 
-func loadConfigFile(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
-	}
-
-	return &cfg, nil
-}
-
-func overrideFromEnv(cfg *Config) {
-	if grpcPort := os.Getenv("DB_GRPC_PORT"); grpcPort != "" {
-		cfg.Server.GRPCPort = grpcPort
-	}
-
-	if level := os.Getenv("LOG_LEVEL"); level != "" {
-		cfg.Logging.Level = level
-	}
-	if path := os.Getenv("LOG_FILE_PATH"); path != "" {
-		cfg.Logging.FilePath = path
-	}
-	if format := os.Getenv("LOG_FORMAT"); format != "" {
-		cfg.Logging.Format = format
-	}
-
-	if host := os.Getenv("DB_HOST"); host != "" {
-		cfg.Database.Host = host
-	}
-	if portStr := os.Getenv("DB_PORT"); portStr != "" {
-		if port, err := strconv.Atoi(portStr); err == nil {
-			cfg.Database.Port = port
-		}
-	}
-	if name := os.Getenv("DB_NAME"); name != "" {
-		cfg.Database.Name = name
-	}
-	if user := os.Getenv("DB_USER"); user != "" {
-		cfg.Database.User = user
-	}
-	if password := os.Getenv("DB_PASSWORD"); password != "" {
-		cfg.Database.Password = password
-	}
-
-	if enabledStr := os.Getenv("REDIS_ENABLED"); enabledStr != "" {
-		if enabled, err := strconv.ParseBool(enabledStr); err == nil {
-			cfg.Redis.Enabled = enabled
-		}
-	}
-	if host := os.Getenv("REDIS_HOST"); host != "" {
-		cfg.Redis.Host = host
-	}
-	if portStr := os.Getenv("REDIS_PORT"); portStr != "" {
-		if port, err := strconv.Atoi(portStr); err == nil {
-			cfg.Redis.Port = port
-		}
-	}
-	if password := os.Getenv("REDIS_PASSWORD"); password != "" {
-		cfg.Redis.Password = password
-	}
-	if dbStr := os.Getenv("REDIS_DB"); dbStr != "" {
-		if db, err := strconv.Atoi(dbStr); err == nil {
-			cfg.Redis.DB = db
-		}
-	}
-}
-
-func (c *DatabaseConfig) DatabaseDSN() string {
+func (c *DatabaseConfig) DSN() string {
 	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s",
-		c.Host,
-		c.Port,
-		c.User,
-		c.Password,
-		c.Name,
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		c.Host, c.Port, c.User, c.Password, c.Name,
 	)
 }
 
-func (c *RedisConfig) RedisAddr() string {
-	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
-func (c *Config) IsRedisEnabled() bool {
-	return c.Redis.Enabled
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
+
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
+		}
+	}
+	return defaultValue
 }

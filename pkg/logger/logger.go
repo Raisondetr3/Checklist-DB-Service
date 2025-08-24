@@ -1,5 +1,3 @@
-// pkg/logger/logger.go для DB-Service
-// Адаптированная версия shared logger component
 package logger
 
 import (
@@ -16,30 +14,24 @@ type Config struct {
 	Level    string `env:"LOG_LEVEL" envDefault:"info"`
 	FilePath string `env:"LOG_FILE_PATH" envDefault:"logs"`
 	FileName string `env:"LOG_FILE_NAME"`
-	Format   string `env:"LOG_FORMAT" envDefault:"json"` // добавили поддержку format
 }
 
-// SetupLogger настраивает глобальный логгер для DB-Service
 func SetupLogger(cfg Config, serviceName string) error {
-	// Создаем директорию для логов
 	if err := os.MkdirAll(cfg.FilePath, 0755); err != nil {
 		return fmt.Errorf("failed to create log directory: %w", err)
 	}
 
-	// Если имя файла не указано, используем имя сервиса
 	if cfg.FileName == "" {
 		cfg.FileName = fmt.Sprintf("%s.log", serviceName)
 	}
 
 	fullPath := filepath.Join(cfg.FilePath, cfg.FileName)
 
-	// Открываем файл для логов
 	logFile, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
 
-	// Определяем уровень логирования
 	var level slog.Level
 	switch cfg.Level {
 	case "debug":
@@ -54,12 +46,10 @@ func SetupLogger(cfg Config, serviceName string) error {
 		level = slog.LevelInfo
 	}
 
-	// Настройки handler'а
 	opts := &slog.HandlerOptions{
 		Level:     level,
 		AddSource: true,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Форматируем время в читаемом виде
 			if a.Key == slog.TimeKey {
 				a.Value = slog.StringValue(a.Value.Time().Format(time.RFC3339))
 			}
@@ -67,28 +57,17 @@ func SetupLogger(cfg Config, serviceName string) error {
 		},
 	}
 
-	// Создаем handler в зависимости от формата
-	var handler slog.Handler
-	if cfg.Format == "text" {
-		handler = slog.NewTextHandler(logFile, opts)
-	} else {
-		handler = slog.NewJSONHandler(logFile, opts)
-	}
+	handler := slog.NewJSONHandler(logFile, opts)
 
-	// Создаем логгер с базовыми полями
 	logger := slog.New(handler).With(
 		slog.String("service", serviceName),
 	)
 
-	// Устанавливаем как глобальный логгер
 	slog.SetDefault(logger)
 
 	return nil
 }
 
-// ====== HTTP REQUEST LOGGING (для health checks) ======
-
-// LogHTTPRequest логирует HTTP запросы (для health endpoints)
 func LogHTTPRequest(ctx context.Context, method, path, userAgent, requestID string, duration time.Duration, statusCode int) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -113,14 +92,7 @@ func LogHTTPRequest(ctx context.Context, method, path, userAgent, requestID stri
 	}
 }
 
-// ====== GRPC REQUEST LOGGING ======
-
-// LogGRPCRequest логирует входящие gRPC запросы
 func LogGRPCRequest(ctx context.Context, method string, duration time.Duration, err error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	attrs := []slog.Attr{
 		slog.String("type", "grpc_request"),
 		slog.String("method", method),
@@ -135,7 +107,6 @@ func LogGRPCRequest(ctx context.Context, method string, duration time.Duration, 
 	}
 }
 
-// LogGRPCCall логирует исходящие gRPC вызовы (если DB-Service вызывает другие сервисы)
 func LogGRPCCall(ctx context.Context, service, method string, duration time.Duration, err error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -156,14 +127,7 @@ func LogGRPCCall(ctx context.Context, service, method string, duration time.Dura
 	}
 }
 
-// ====== DATABASE LOGGING ======
-
-// LogDatabaseQuery логирует запросы к PostgreSQL
 func LogDatabaseQuery(ctx context.Context, query string, args []interface{}, duration time.Duration, err error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	attrs := []slog.Attr{
 		slog.String("type", "database_query"),
 		slog.String("query", query),
@@ -175,7 +139,6 @@ func LogDatabaseQuery(ctx context.Context, query string, args []interface{}, dur
 		attrs = append(attrs, slog.String("error", err.Error()))
 		slog.LogAttrs(ctx, slog.LevelError, "Database Query Failed", attrs...)
 	} else {
-		// Логируем медленные запросы как WARNING
 		if duration > 1*time.Second {
 			attrs = append(attrs, slog.String("slow_query", "true"))
 			slog.LogAttrs(ctx, slog.LevelWarn, "Slow Database Query", attrs...)
@@ -185,13 +148,7 @@ func LogDatabaseQuery(ctx context.Context, query string, args []interface{}, dur
 	}
 }
 
-// LogDatabaseConnection логирует события подключения к БД
 func LogDatabaseConnection(ctx context.Context, dsn string, operation string, err error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	// Маскируем пароль в DSN для логов
 	maskedDSN := maskPassword(dsn)
 
 	attrs := []slog.Attr{
@@ -208,14 +165,7 @@ func LogDatabaseConnection(ctx context.Context, dsn string, operation string, er
 	}
 }
 
-// ====== REDIS LOGGING ======
-
-// LogRedisOperation логирует операции с Redis
 func LogRedisOperation(ctx context.Context, operation, key string, duration time.Duration, err error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	attrs := []slog.Attr{
 		slog.String("type", "redis_operation"),
 		slog.String("operation", operation),
@@ -231,12 +181,7 @@ func LogRedisOperation(ctx context.Context, operation, key string, duration time
 	}
 }
 
-// LogRedisCacheHit логирует попадания/промахи кэша
 func LogRedisCacheHit(ctx context.Context, key string, hit bool, duration time.Duration) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	attrs := []slog.Attr{
 		slog.String("type", "cache_event"),
 		slog.String("key", key),
@@ -251,14 +196,7 @@ func LogRedisCacheHit(ctx context.Context, key string, hit bool, duration time.D
 	}
 }
 
-// ====== GENERAL ERROR LOGGING ======
-
-// LogError логирует общие ошибки
 func LogError(ctx context.Context, err error, operation string, additionalFields ...slog.Attr) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	attrs := []slog.Attr{
 		slog.String("type", "error"),
 		slog.String("operation", operation),
@@ -269,14 +207,7 @@ func LogError(ctx context.Context, err error, operation string, additionalFields
 	slog.LogAttrs(ctx, slog.LevelError, "Operation Error", attrs...)
 }
 
-// ====== BUSINESS LOGIC LOGGING ======
-
-// LogTaskOperation логирует операции с задачами
 func LogTaskOperation(ctx context.Context, operation, taskID string, duration time.Duration, err error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	attrs := []slog.Attr{
 		slog.String("type", "task_operation"),
 		slog.String("operation", operation),
@@ -292,34 +223,23 @@ func LogTaskOperation(ctx context.Context, operation, taskID string, duration ti
 	}
 }
 
-// ====== HELPER FUNCTIONS ======
-
-// WithTaskID добавляет task ID к логгеру
 func WithTaskID(taskID string) *slog.Logger {
 	return slog.With(slog.String("task_id", taskID))
 }
 
-// WithRequestID добавляет request ID к логгеру
 func WithRequestID(requestID string) *slog.Logger {
 	return slog.With(slog.String("request_id", requestID))
 }
 
-// WithOperation добавляет операцию к логгеру
 func WithOperation(operation string) *slog.Logger {
 	return slog.With(slog.String("operation", operation))
 }
 
-// ====== UTILITY FUNCTIONS ======
-
-// maskPassword маскирует пароль в строке подключения к БД
 func maskPassword(dsn string) string {
-	// Простая замена password=xxx на password=***
-	// В production можно использовать более сложную логику
 	if dsn == "" {
 		return dsn
 	}
 
-	// Ищем паттерн password=...
 	start := strings.Index(dsn, "password=")
 	if start == -1 {
 		return dsn
@@ -328,12 +248,10 @@ func maskPassword(dsn string) string {
 	start += len("password=")
 	end := start
 
-	// Ищем конец пароля (пробел или конец строки)
 	for end < len(dsn) && dsn[end] != ' ' && dsn[end] != '&' {
 		end++
 	}
 
-	// Заменяем пароль на ***
 	masked := dsn[:start] + "***"
 	if end < len(dsn) {
 		masked += dsn[end:]
@@ -357,12 +275,11 @@ func LogSlowOperation(ctx context.Context, operation string, duration time.Durat
 	slog.LogAttrs(ctx, slog.LevelWarn, "Slow Operation Detected", attrs...)
 }
 
-func LogServiceStart(serviceName, version string, config map[string]interface{}) {
+func LogServiceStart(serviceName string, config map[string]interface{}) {
 	attrs := []slog.Attr{
 		slog.String("type", "service_lifecycle"),
 		slog.String("event", "start"),
 		slog.String("service", serviceName),
-		slog.String("version", version),
 		slog.Any("config", config),
 	}
 

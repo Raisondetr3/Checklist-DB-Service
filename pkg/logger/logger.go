@@ -296,3 +296,76 @@ func LogServiceStop(serviceName string, reason string) {
 
 	slog.LogAttrs(context.Background(), slog.LevelInfo, "Service Stopping", attrs...)
 }
+
+func LogRedisShardConnection(ctx context.Context, shardIndex int, addr string, err error) {
+	attrs := []slog.Attr{
+		slog.String("type", "redis_shard_connection"),
+		slog.Int("shard_index", shardIndex),
+		slog.String("address", addr),
+	}
+
+	if err != nil {
+		attrs = append(attrs, slog.String("error", err.Error()))
+		slog.LogAttrs(ctx, slog.LevelError, "Redis Shard Connection Failed", attrs...)
+	} else {
+		slog.LogAttrs(ctx, slog.LevelInfo, "Redis Shard Connected", attrs...)
+	}
+}
+
+func LogRedisShardSelection(ctx context.Context, key string, shardIndex int, operation string) {
+	attrs := []slog.Attr{
+		slog.String("type", "redis_shard_selection"),
+		slog.String("key", key),
+		slog.Int("shard_index", shardIndex),
+		slog.String("operation", operation),
+	}
+
+	slog.LogAttrs(ctx, slog.LevelDebug, "Redis Shard Selected", attrs...)
+}
+
+func LogCacheOperation(ctx context.Context, operation, key string, shardIndex int, duration time.Duration, err error) {
+	attrs := []slog.Attr{
+		slog.String("type", "cache_operation"),
+		slog.String("operation", operation),
+		slog.String("key", key),
+		slog.Int("shard_index", shardIndex),
+		slog.Duration("duration", duration),
+	}
+
+	if err != nil {
+		attrs = append(attrs, slog.String("error", err.Error()))
+		slog.LogAttrs(ctx, slog.LevelError, "Cache Operation Failed", attrs...)
+	} else {
+		slog.LogAttrs(ctx, slog.LevelDebug, "Cache Operation Success", attrs...)
+	}
+}
+
+func LogCacheInvalidation(ctx context.Context, key string, reason string, err error) {
+	attrs := []slog.Attr{
+		slog.String("type", "cache_invalidation"),
+		slog.String("key", key),
+		slog.String("reason", reason),
+	}
+
+	if err != nil {
+		attrs = append(attrs, slog.String("error", err.Error()))
+		slog.LogAttrs(ctx, slog.LevelWarn, "Cache Invalidation Failed", attrs...)
+	} else {
+		slog.LogAttrs(ctx, slog.LevelDebug, "Cache Invalidated", attrs...)
+	}
+}
+
+func LogCacheStatus(ctx context.Context, enabled bool, shardCount int, ttl time.Duration) {
+	attrs := []slog.Attr{
+		slog.String("type", "cache_status"),
+		slog.Bool("enabled", enabled),
+		slog.Int("shard_count", shardCount),
+		slog.Duration("default_ttl", ttl),
+	}
+
+	if enabled {
+		slog.LogAttrs(ctx, slog.LevelInfo, "Cache Initialized", attrs...)
+	} else {
+		slog.LogAttrs(ctx, slog.LevelInfo, "Cache Disabled", attrs...)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Raisondetr3/checklist-db-service/internal/cache"
 	"github.com/Raisondetr3/checklist-db-service/internal/config"
 	"github.com/Raisondetr3/checklist-db-service/internal/repository"
 	"github.com/Raisondetr3/checklist-db-service/internal/service"
@@ -17,10 +18,11 @@ import (
 	"github.com/Raisondetr3/checklist-db-service/pkg/logger"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	_ "github.com/joho/godotenv"
+	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {
+	// Загрузка конфигурации
 	cfg, err := config.Load()
 	if err != nil {
 		panic("Failed to load config: " + err.Error())
@@ -37,12 +39,14 @@ func main() {
 	}
 
 	logger.LogServiceStart("db-service", map[string]interface{}{
-		"http_port":     cfg.Server.HTTPPort,
-		"grpc_port":     cfg.Server.GRPCPort,
-		"db_host":       cfg.Database.Host,
-		"db_name":       cfg.Database.Name,
-		"log_level":     cfg.Logging.Level,
-		"redis_enabled": cfg.Redis.Enabled,
+		"http_port":      cfg.Server.HTTPPort,
+		"grpc_port":      cfg.Server.GRPCPort,
+		"db_host":        cfg.Database.Host,
+		"db_name":        cfg.Database.Name,
+		"log_level":      cfg.Logging.Level,
+		"redis_enabled":  cfg.Redis.Enabled,
+		"redis_shards":   len(cfg.Redis.URLs),
+		"redis_ttl":      cfg.Redis.TTL.String(),
 	})
 
 	defer logger.LogServiceStop("db-service", "shutdown")
@@ -54,8 +58,39 @@ func main() {
 	}
 	defer dbPool.Close()
 
+	var redisCache cache.RedisCache
+	if cfg.Redis.Enabled {
+		redisCache, err = cache.NewRedisCache(
+			cfg.Redis.URLs,
+			cfg.Redis.Password,
+			cfg.Redis.DB,
+			cfg.Redis.Enabled,
+		)
+		if err != nil {
+			slog.Error("Failed to initialize Redis cache", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		defer func() {
+			if err := redisCache.Close(); err != nil {
+				slog.Error("Failed to close Redis connections", slog.String("error", err.Error()))
+			}
+		}()
+		slog.Info("Redis cache initialized successfully", 
+			slog.Int("shards", len(cfg.Redis.URLs)),
+			slog.Duration("ttl", cfg.Redis.TTL))
+	} else {
+		redisCache, _ = cache.NewRedisCache(nil, "", 0, false)
+		slog.Info("Redis cache disabled")
+	}
+
 	healthRepo := repository.NewHealthRepository(dbPool)
 	taskRepo := repository.NewTaskRepository(dbPool)
+	
+	if cfg.Redis.Enabled {
+		taskRepo = repository.NewCachedTaskRepository(taskRepo, redisCache, cfg.Redis.TTL)
+		slog.Info("Task repository wrapped with Redis cache", 
+			slog.Duration("ttl", cfg.Redis.TTL))
+	}
 
 	healthService := service.NewHealthService(healthRepo)
 	taskService := service.NewTaskService(taskRepo)

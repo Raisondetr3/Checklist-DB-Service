@@ -23,40 +23,17 @@ services:
       - checklist-network
     restart: unless-stopped
 
-  checklist-db-service:
-    build: 
-      context: .
-      dockerfile: Dockerfile
-    container_name: checklist-db-service
-    env_file:
-      - .env
-    environment:
-      DB_HOST: postgres
-      REDIS_HOST: redis
-      IN_DOCKER: "true"
-    ports:
-      - "${HTTP_PORT}:${HTTP_PORT}"
-      - "${GRPC_PORT}:${GRPC_PORT}"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - ./logs:/app/logs
-    networks:
-      - checklist-network
-    restart: unless-stopped
-
-  redis:
+  redis-shard-0:
     image: redis:7-alpine
-    container_name: checklist-redis
+    container_name: checklist-redis-shard-0
     env_file:
       - .env
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     ports:
-      - "${REDIS_PORT}:6379"
+      - "6379:6379"
     volumes:
-      - redis_data:/data
+      - redis_shard_0_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -68,12 +45,64 @@ services:
     profiles:
       - redis
 
+  redis-shard-1:
+    image: redis:7-alpine
+    container_name: checklist-redis-shard-1
+    env_file:
+      - .env
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_shard_1_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - checklist-network
+    restart: unless-stopped
+    profiles:
+      - redis
+
+  checklist-db-service:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: checklist-db-service
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      IN_DOCKER: "true"
+    ports:
+      - "${HTTP_PORT}:${HTTP_PORT}"
+      - "${GRPC_PORT}:${GRPC_PORT}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-shard-0:
+        condition: service_healthy
+      redis-shard-1:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - checklist-network
+    restart: unless-stopped
+    profiles:
+      - redis
+
 volumes:
   postgres_data:
     driver: local
-  redis_data:
+  redis_shard_0_data:
+    driver: local
+  redis_shard_1_data:
     driver: local
 
 networks:
   checklist-network:
-    driver: bridge
+    external: true

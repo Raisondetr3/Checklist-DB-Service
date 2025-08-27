@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -38,15 +39,14 @@ type DatabaseConfig struct {
 
 type RedisConfig struct {
 	Enabled  bool
-	Host     string
-	Port     int
+	URLs     []string
 	Password string
 	DB       int
+	TTL      time.Duration
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		// Дефолтные значения
 		Server: ServerConfig{
 			HTTPPort:     getEnv("HTTP_PORT", "8081"),
 			GRPCPort:     getEnv("GRPC_PORT", "9090"),
@@ -68,10 +68,10 @@ func Load() (*Config, error) {
 		},
 		Redis: RedisConfig{
 			Enabled:  getEnvBool("REDIS_ENABLED", false),
-			Host:     getEnv("REDIS_HOST", "localhost"),
-			Port:     getEnvInt("REDIS_PORT", 6379),
+			URLs:     parseRedisURLs(getEnv("REDIS_URLS", "")),
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getEnvInt("REDIS_DB", 0),
+			TTL:      time.Duration(getEnvInt("REDIS_TTL", 300)) * time.Second,
 		},
 	}
 
@@ -83,6 +83,24 @@ func (c *DatabaseConfig) DSN() string {
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		c.Host, c.Port, c.User, c.Password, c.Name,
 	)
+}
+
+func parseRedisURLs(urls string) []string {
+	if urls == "" {
+		return []string{}
+	}
+	
+	urlList := strings.Split(urls, ",")
+	result := make([]string, 0, len(urlList))
+	
+	for _, url := range urlList {
+		trimmed := strings.TrimSpace(url)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	
+	return result
 }
 
 func getEnv(key, defaultValue string) string {

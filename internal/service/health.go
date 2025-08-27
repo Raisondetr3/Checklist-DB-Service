@@ -48,7 +48,6 @@ func (s *healthService) Health(ctx context.Context) (*dto.HealthStatus, error) {
 		return &dto.HealthStatus{
 			Status:    status,
 			Timestamp: time.Now(),
-			Duration:  duration,
 		}, nil
 	}
 
@@ -57,6 +56,5 @@ func (s *healthService) Health(ctx context.Context) (*dto.HealthStatus, error) {
 	return &dto.HealthStatus{
 		Status:    StatusHealthy,
 		Timestamp: time.Now(),
-		Duration:  duration,
 	}, nil
 }
